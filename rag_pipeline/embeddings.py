@@ -1,56 +1,61 @@
 """
-Phase 4: Embedding generation using OpenAI text-embedding-3-small.
+Phase 4: Embedding generation using Google Gemini text-embedding-001.
 
 Provides:
     embed_chunks()    — embed a list of chunk dicts, returns them with embeddings attached
     embed_sentences() — embed individual sentences (for semantic chunking)
     embed_query()     — embed a single query string for retrieval
 
-Batching: 100 chunks per API call.
-Retry: exponential backoff on rate limit (429), max 3 retries.
+Model: gemini-embedding-001 (3072-dim)
+Batching: 20 texts per API call (Gemini batch limit)
+Retry: exponential backoff on rate limit errors, max 6 retries.
 """
 
 import os
 import time
-import openai
 from dotenv import load_dotenv
+from google import genai
+from google.genai import types
 
 load_dotenv()
 
-EMBEDDING_MODEL = "text-embedding-3-small"
-EMBEDDING_DIM   = 1536
-BATCH_SIZE      = 100
-MAX_RETRIES     = 3
+EMBEDDING_MODEL = "gemini-embedding-001"
+EMBEDDING_DIM   = 768
+OUTPUT_DIM      = 768  # truncated from 3072 — fits within pgvector HNSW 2000-dim limit
+BATCH_SIZE      = 20
+MAX_RETRIES     = 6
 
 
-def _get_client() -> openai.OpenAI:
-    api_key = os.environ.get("OPENAI_API_KEY")
+def _get_client() -> genai.Client:
+    api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        raise EnvironmentError("OPENAI_API_KEY is not set. Add it to your .env file.")
-    return openai.OpenAI(api_key=api_key)
+        raise EnvironmentError("GEMINI_API_KEY is not set. Add it to your .env file.")
+    return genai.Client(api_key=api_key)
 
 
-def _embed_batch(client: openai.OpenAI, texts: list[str]) -> list[list[float]]:
+def _embed_batch(client: genai.Client, texts: list[str]) -> list[list[float]]:
     """
     Embed a batch of texts with exponential backoff on rate limit errors.
     Returns a list of embedding vectors aligned with input texts.
     """
     for attempt in range(MAX_RETRIES):
         try:
-            response = client.embeddings.create(
-                input=texts,
+            response = client.models.embed_content(
                 model=EMBEDDING_MODEL,
+                contents=texts,
+                config=types.EmbedContentConfig(output_dimensionality=OUTPUT_DIM),
             )
-            # Response data is ordered by index
-            vectors = [item.embedding for item in sorted(response.data, key=lambda x: x.index)]
-            return vectors
-        except openai.RateLimitError:
-            wait = 2 ** attempt
-            print(f"    [embeddings] Rate limit hit. Waiting {wait}s (attempt {attempt + 1}/{MAX_RETRIES})...")
-            time.sleep(wait)
-        except openai.APIError as e:
-            print(f"    [embeddings] API error: {e}. Retrying...")
-            time.sleep(2 ** attempt)
+            return [list(e.values) for e in response.embeddings]
+        except Exception as e:
+            err_str = str(e).lower()
+            if "429" in err_str or "quota" in err_str or "rate" in err_str or "resource" in err_str:
+                wait = 10 * (2 ** attempt)  # 10s, 20s, 40s, 80s, 160s, 320s
+                print(f"    [embeddings] Rate limit hit. Waiting {wait}s (attempt {attempt + 1}/{MAX_RETRIES})...")
+                time.sleep(wait)
+            else:
+                wait = 5 * (2 ** attempt)
+                print(f"    [embeddings] API error: {str(e)[:120]}. Retrying in {wait}s...")
+                time.sleep(wait)
 
     raise RuntimeError(f"Embedding failed after {MAX_RETRIES} retries.")
 
@@ -63,7 +68,7 @@ def embed_chunks(chunks: list[dict]) -> list[dict]:
     """
     client = _get_client()
     total = len(chunks)
-    print(f"  [embeddings] Embedding {total} chunks in batches of {BATCH_SIZE}...")
+    print(f"  [embeddings] Embedding {total} chunks in batches of {BATCH_SIZE} (Gemini {EMBEDDING_MODEL})...")
 
     for batch_start in range(0, total, BATCH_SIZE):
         batch = chunks[batch_start: batch_start + BATCH_SIZE]
@@ -76,7 +81,6 @@ def embed_chunks(chunks: list[dict]) -> list[dict]:
         print(f"    [embeddings] Batch {batch_start // BATCH_SIZE + 1}: "
               f"{batch_start + len(batch)}/{total} done")
 
-    # Verify shape
     sample = chunks[0]["embedding"] if chunks else []
     print(f"  [embeddings] Embedding dim: {len(sample)} (expected {EMBEDDING_DIM})")
     return chunks
@@ -89,7 +93,7 @@ def embed_sentences(sentences: list[str]) -> list[list[float]]:
     """
     client = _get_client()
     total = len(sentences)
-    print(f"  [embeddings] Embedding {total} sentences for semantic chunking...")
+    print(f"  [embeddings] Embedding {total} sentences for semantic chunking (Gemini)...")
 
     all_vectors: list[list[float]] = []
     for batch_start in range(0, total, BATCH_SIZE):
@@ -114,7 +118,7 @@ def embed_query(query: str) -> list[float]:
 def insert_chunks_to_db(chunks: list[dict], conn) -> int:
     """
     Insert a list of chunk dicts (with embeddings) into document_chunks table.
-    Uses a single executemany for efficiency.
+    Uses execute_batch for efficiency.
     Returns the number of rows inserted.
     """
     import psycopg2.extras
@@ -142,7 +146,7 @@ def insert_chunks_to_db(chunks: list[dict], conn) -> int:
     """
 
     cur = conn.cursor()
-    psycopg2.extras.execute_batch(cur, sql, records, page_size=100)
+    psycopg2.extras.execute_batch(cur, sql, records, page_size=50)
     conn.commit()
     count = cur.rowcount
     cur.close()

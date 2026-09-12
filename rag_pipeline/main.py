@@ -48,12 +48,16 @@ load_dotenv()
 def get_db_connection():
     import psycopg2
     supabase_url = os.environ["SUPABASE_URL"]
-    service_key  = os.environ["SUPABASE_SERVICE_KEY"]
+    db_password  = os.environ["SUPABASE_DB_PASSWORD"]
     project_ref  = supabase_url.replace("https://", "").split(".")[0]
-    host         = f"db.{project_ref}.supabase.co"
     return psycopg2.connect(
-        host=host, port=5432, dbname="postgres",
-        user="postgres", password=service_key, sslmode="require",
+        host="aws-0-ap-northeast-2.pooler.supabase.com",
+        port=5432,
+        dbname="postgres",
+        user=f"postgres.{project_ref}",
+        password=db_password,
+        sslmode="require",
+        connect_timeout=30,
     )
 
 
@@ -213,7 +217,7 @@ def main():
     args = parser.parse_args()
 
     # Validate required env vars
-    required_vars = ["SUPABASE_URL", "SUPABASE_SERVICE_KEY", "OPENAI_API_KEY"]
+    required_vars = ["SUPABASE_URL", "SUPABASE_DB_PASSWORD", "OPENAI_API_KEY"]
     missing = [v for v in required_vars if not os.environ.get(v)]
     if missing:
         print(f"ERROR: Missing required environment variables: {', '.join(missing)}")

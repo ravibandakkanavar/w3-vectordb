@@ -21,19 +21,19 @@ load_dotenv()
 
 def get_connection():
     supabase_url = os.environ["SUPABASE_URL"]          # e.g. https://abcdef.supabase.co
-    service_key  = os.environ["SUPABASE_SERVICE_KEY"]  # service role key (not anon key)
+    db_password  = os.environ["SUPABASE_DB_PASSWORD"]  # direct Postgres password
 
-    # Extract project ref from URL: https://<ref>.supabase.co
+    # Session pooler on port 5432 — supports DDL (CREATE EXTENSION, CREATE INDEX)
     project_ref = supabase_url.replace("https://", "").split(".")[0]
-    host = f"db.{project_ref}.supabase.co"
 
     conn = psycopg2.connect(
-        host=host,
+        host="aws-0-ap-northeast-2.pooler.supabase.com",
         port=5432,
         dbname="postgres",
-        user="postgres",
-        password=service_key,
+        user=f"postgres.{project_ref}",
+        password=db_password,
         sslmode="require",
+        connect_timeout=30,
     )
     return conn
 
@@ -54,14 +54,12 @@ CREATE TABLE IF NOT EXISTS document_chunks (
     char_end      INTEGER NOT NULL,
     content       TEXT NOT NULL,
     token_count   INTEGER,
-    embedding     VECTOR(1536) NOT NULL
+    embedding     VECTOR(768) NOT NULL
 );
 """
 
-# HNSW index: m=16 (bidirectional links), ef_construction=64 (build-time recall).
-# vector_cosine_ops: cosine distance, correct for normalized OpenAI embeddings.
-# Justified over IVFFlat: a 50-page PDF produces ~150-600 chunks — well below the
-# ~3,900 rows IVFFlat needs to train reliable inverted lists.
+# HNSW index for 768-dim Gemini embeddings (gemini-embedding-001, output_dimensionality=768).
+# vector_cosine_ops: cosine distance, correct for normalized embeddings.
 SQL_CREATE_INDEX = """
 CREATE INDEX IF NOT EXISTS document_chunks_embedding_hnsw_idx
 ON document_chunks
@@ -85,7 +83,10 @@ def setup_database():
     print("Enabling pgvector extension...")
     cur.execute(SQL_ENABLE_PGVECTOR)
 
-    print("Creating document_chunks table...")
+    print("Dropping existing table if present (schema change: 1536 → 3072 dims)...")
+    cur.execute("DROP TABLE IF EXISTS document_chunks CASCADE;")
+
+    print("Creating document_chunks table (VECTOR(3072) for Gemini embeddings)...")
     cur.execute(SQL_CREATE_TABLE)
 
     print("Creating HNSW index (m=16, ef_construction=64)...")

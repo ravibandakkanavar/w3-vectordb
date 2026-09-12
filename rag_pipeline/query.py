@@ -31,32 +31,31 @@ from embeddings import embed_query
 # ---------------------------------------------------------------------------
 
 QUERIES: dict[str, dict] = {
-    "Q1":  {"type": "Fact lookup",    "text": "REPLACE: What is the exact value of [key statistic in the document]?"},
-    "Q2":  {"type": "Fact lookup",    "text": "REPLACE: Who is [named entity] and what is their role?"},
-    "Q3":  {"type": "Fact lookup",    "text": "REPLACE: What does [defined term] mean according to the document?"},
-    "Q4":  {"type": "Multi-sentence", "text": "REPLACE: Explain the relationship between [concept A] and [concept B]."},
-    "Q5":  {"type": "Multi-sentence", "text": "REPLACE: What evidence supports [claim made mid-paragraph]?"},
-    "Q6":  {"type": "Multi-sentence", "text": "REPLACE: What are the steps in [process described over a paragraph]?"},
-    "Q7":  {"type": "Cross-section",  "text": "REPLACE: How does [topic in early section] connect to [topic in later section]?"},
-    "Q8":  {"type": "Cross-section",  "text": "REPLACE: What are all the limitations mentioned throughout the document?"},
-    "Q9":  {"type": "Cross-section",  "text": "REPLACE: Compare the approach described in [early section] to [later section]."},
-    "Q10": {"type": "Boundary",       "text": "REPLACE: What is discussed immediately after [mid-page concept]?"},
+    "Q1":  {"type": "Fact lookup",    "text": "What is the sensitivity and specificity of the IDx-DR system for diabetic retinopathy screening?"},
+    "Q2":  {"type": "Fact lookup",    "text": "What score did Med-PaLM 2 achieve on the US Medical Licensing Examination?"},
+    "Q3":  {"type": "Fact lookup",    "text": "What does SHAP stand for and what is it used for in machine learning?"},
+    "Q4":  {"type": "Multi-sentence", "text": "Explain the relationship between data quality and model performance in healthcare ML."},
+    "Q5":  {"type": "Multi-sentence", "text": "What evidence supports the claim that the Epic Sepsis Model underperforms in real-world deployment?"},
+    "Q6":  {"type": "Multi-sentence", "text": "What are the steps involved in federated learning and why is it useful in healthcare?"},
+    "Q7":  {"type": "Cross-section",  "text": "How does algorithmic bias described in section 4 connect to the recommendations for post-deployment monitoring in section 7?"},
+    "Q8":  {"type": "Cross-section",  "text": "What are all the limitations mentioned throughout the document?"},
+    "Q9":  {"type": "Cross-section",  "text": "Compare the supervised learning approach described in section 2 to the reinforcement learning approach."},
+    "Q10": {"type": "Boundary",       "text": "What is discussed immediately after the AlphaFold2 protein structure prediction result?"},
 }
 
-# Pre-label gold chunks BEFORE running queries.
-# For each query, identify the single chunk_id that best answers it by reading the PDF.
-# Cross-reference structural/semantic by char_start/char_end overlap (>80% overlap = same region).
+# Gold labels: chunk_id of the single fixed-strategy chunk that best answers each query.
+# Cross-referenced to structural/semantic by >80% char overlap.
 GOLD_LABELS: dict[str, str] = {
-    "Q1":  "fixed_000",   # REPLACE with real chunk_id
-    "Q2":  "fixed_000",
-    "Q3":  "fixed_000",
-    "Q4":  "fixed_000",
-    "Q5":  "fixed_000",
-    "Q6":  "fixed_000",
-    "Q7":  "fixed_000",
-    "Q8":  "fixed_000",
-    "Q9":  "fixed_000",
-    "Q10": "fixed_000",
+    "Q1":  "fixed_002",  # IDx-DR sensitivity/specificity — page 2/3, chars 4662-7062
+    "Q2":  "fixed_008",  # Med-PaLM 2 USMLE score — page 6, chars 18401-21249
+    "Q3":  "fixed_005",  # SHAP definition — page 4, chars 11272-13908
+    "Q4":  "fixed_007",  # data quality vs model performance — page 5, chars 16012-18714
+    "Q5":  "fixed_003",  # Epic Sepsis Model AUROC 0.74 — page 3, chars 6853-9215
+    "Q6":  "fixed_008",  # federated learning — page 6, chars 18401-21249
+    "Q7":  "fixed_009",  # post-deployment monitoring recommendations — page 7, chars 20999-23790
+    "Q8":  "fixed_010",  # limitations section — page 8, chars 23504-25127
+    "Q9":  "fixed_001",  # supervised vs RL comparison — page 1, chars 2372-4923
+    "Q10": "fixed_004",  # content after AlphaFold2 (personalised treatment) — page 3, chars 8922-11512
 }
 
 STRATEGIES = ["fixed", "structural", "semantic"]

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "skills": {
+      "command": "cmd",
+      "args": ["/c", "skills-mcp"]
+    }
+  }
+}
