@@ -5,6 +5,8 @@ interface UploadPanelProps {
   onIngestComplete: () => void;
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
 export default function UploadPanel({ onIngestComplete }: UploadPanelProps) {
   const [file, setFile] = useState<File | null>(null);
   const [phase, setPhase] = useState<"idle" | "uploading" | "polling" | "done" | "error">("idle");
@@ -22,9 +24,9 @@ export default function UploadPanel({ onIngestComplete }: UploadPanelProps) {
     form.append("file", file);
 
     try {
-      const res = await fetch("http://localhost:8000/api/ingest", { method: "POST", body: form });
+      const res = await fetch(`${API_BASE}/api/ingest`, { method: "POST", body: form });
       if (!res.ok) {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Upload failed");
       }
       setPhase("polling");
@@ -32,14 +34,18 @@ export default function UploadPanel({ onIngestComplete }: UploadPanelProps) {
       pollProgress();
     } catch (e: unknown) {
       setPhase("error");
-      setMessage(e instanceof Error ? e.message : "Upload failed");
+      const errorText = e instanceof Error ? e.message : "Upload failed";
+      setMessage(`${errorText}. Check that the backend is running and NEXT_PUBLIC_API_URL is correct.`);
     }
   }
 
   function pollProgress() {
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("http://localhost:8000/api/ingest/progress");
+        const res = await fetch(`${API_BASE}/api/ingest/progress`);
+        if (!res.ok) {
+          throw new Error("Backend unavailable");
+        }
         const data = await res.json();
         setMessage(data.message || "Processing...");
         if (data.status === "done") {
@@ -50,11 +56,12 @@ export default function UploadPanel({ onIngestComplete }: UploadPanelProps) {
         } else if (data.status === "error") {
           clearInterval(interval);
           setPhase("error");
+          setMessage(data.message || "Ingestion failed.");
         }
       } catch {
         clearInterval(interval);
         setPhase("error");
-        setMessage("Lost connection to backend.");
+        setMessage("Lost connection to backend. Check that the Python API is running and the API URL is configured correctly.");
       }
     }, 2000);
   }

@@ -1,7 +1,14 @@
 """FastAPI entry point for the RAG pipeline demo."""
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import ingest, query, status
+
+allowed_origins = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000,https://frontend-n052z6lo9-ravib-projects.vercel.app,https://*.vercel.app",
+).split(",")
 
 app = FastAPI(
     title="RAG Pipeline Demo",
@@ -11,7 +18,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:\d+|http://127\.0\.0\.1:\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

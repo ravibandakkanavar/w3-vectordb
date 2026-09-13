@@ -22,3 +22,6 @@ frontend/out/
 # OS
 .DS_Store
 Thumbs.db
+
+# Render
+render.yaml
