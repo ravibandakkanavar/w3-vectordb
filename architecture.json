@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "w3-vectordb: RAG Pipeline Architecture",
+    "output": "architecture.html",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "ingest-path",
+        "label": "Ingestion path",
+        "focus": ["user", "nextjs", "fastapi", "chunker", "gemini", "supabase"],
+        "note": "PDF upload flows through chunking, embedding, and storage."
+      },
+      {
+        "id": "query-path",
+        "label": "Query path",
+        "focus": ["user", "nextjs", "fastapi", "gemini", "supabase", "results"],
+        "note": "Free-text query is embedded and matched against stored vectors."
+      }
+    ]
+  },
+  "components": [
+    { "id": "user",      "type": "external",  "label": "User",          "sublabel": "Browser",                "pos": [40,  300], "size": [110, 60] },
+    { "id": "nextjs",    "type": "frontend",  "label": "Next.js UI",    "sublabel": "localhost:3000",         "pos": [220, 300], "size": [130, 60] },
+    { "id": "fastapi",   "type": "backend",   "label": "FastAPI",       "sublabel": "localhost:8000",         "pos": [430, 300], "size": [130, 60] },
+    { "id": "chunker",   "type": "backend",   "label": "Chunker",       "sublabel": "3 strategies",           "pos": [430, 160], "size": [130, 60], "tag": "fixed · structural · semantic" },
+    { "id": "gemini",    "type": "cloud",     "label": "Gemini API",    "sublabel": "text-embedding-001",     "pos": [640, 160], "size": [130, 60] },
+    { "id": "supabase",  "type": "database",  "label": "Supabase",      "sublabel": "pgvector HNSW",          "pos": [640, 300], "size": [130, 60], "tag": "VECTOR(768)" },
+    { "id": "results",   "type": "frontend",  "label": "Results UI",    "sublabel": "3-column comparison",    "pos": [850, 300], "size": [130, 60] },
+    { "id": "pdf",       "type": "external",  "label": "PDF File",      "sublabel": "source document",        "pos": [220, 160], "size": [110, 60] }
+  ],
+  "boundaries": [
+    { "kind": "region",         "label": "Local machine",          "wraps": ["nextjs", "fastapi", "chunker"] },
+    { "kind": "security-group", "label": "Google Cloud",           "wraps": ["gemini"] },
+    { "kind": "security-group", "label": "Supabase (ap-northeast-2)", "wraps": ["supabase"] }
+  ],
+  "connections": [
+    { "id": "user-to-ui",       "from": "user",     "to": "nextjs",   "label": "HTTP",            "variant": "emphasis" },
+    { "id": "pdf-to-api",       "from": "pdf",      "to": "fastapi",  "label": "upload",          "fromSide": "right", "toSide": "top", "labelDy": -18 },
+    { "id": "ui-to-api",        "from": "nextjs",   "to": "fastapi",  "label": "REST API" },
+    { "id": "api-to-chunker",   "from": "fastapi",  "to": "chunker",  "label": "extract + chunk", "fromSide": "top", "toSide": "bottom", "labelAt": [488, 130] },
+    { "id": "chunker-to-gemini","from": "chunker",  "to": "gemini",   "label": "embed texts",     "variant": "emphasis" },
+    { "id": "gemini-to-api",    "from": "gemini",   "to": "fastapi",  "label": "768-dim vectors", "fromSide": "bottom", "toSide": "top", "labelAt": [580, 230] },
+    { "id": "api-to-db",        "from": "fastapi",  "to": "supabase", "label": "INSERT vectors",  "variant": "emphasis", "labelAt": [584, 374] },
+    { "id": "api-query-embed",  "from": "fastapi",  "to": "gemini",   "label": "embed query",     "variant": "dashed", "fromSide": "top", "toSide": "bottom", "labelAt": [600, 215] },
+    { "id": "api-vector-search","from": "fastapi",  "to": "supabase", "label": "cosine search",   "variant": "dashed", "fromSide": "bottom", "toSide": "bottom", "labelAt": [584, 420] },
+    { "id": "api-to-results",   "from": "fastapi",  "to": "results",  "label": "top-3 per strategy", "variant": "emphasis", "fromSide": "bottom", "toSide": "bottom", "via": [[495, 440], [915, 440]], "labelAt": [705, 462] },
+    { "id": "results-to-user",  "from": "results",  "to": "user",     "label": "display",         "fromSide": "bottom", "toSide": "bottom", "via": [[915, 480], [95, 480]] }
+  ],
+  "cards": [
+    { "dot": "cyan",    "title": "Frontend",    "items": ["Next.js 14 + Tailwind CSS", "PDF upload with progress polling", "Free-text query + sample queries", "Side-by-side results for 3 strategies"] },
+    { "dot": "emerald", "title": "Backend",     "items": ["FastAPI with background task for ingestion", "3 chunking strategies: fixed (500 tok), structural (400 tok), semantic (cosine boundary)", "pdfplumber for PDF extraction + text cleaning"] },
+    { "dot": "violet",  "title": "Embeddings",  "items": ["Gemini text-embedding-001 at 768 dimensions", "Batch size 20, exponential backoff on rate limits"] },
+    { "dot": "rose",    "title": "Vector DB",   "items": ["Supabase pgvector on ap-northeast-2 pooler", "HNSW index: m=16, ef_construction=64, cosine ops", "32 chunks stored across 3 strategies"] }
+  ]
+}
